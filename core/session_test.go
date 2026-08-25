@@ -982,6 +982,58 @@ func TestSwitchToAgentSession_PreservesHistory(t *testing.T) {
 	}
 }
 
+func TestSwitchToInternalSession_CrossKeyPreservesExactHistory(t *testing.T) {
+	sm := NewSessionManager("")
+	target := sm.NewSession("telegram:thread:user-a", "target")
+	target.SetAgentInfo("agent-shared", "codex", "target")
+	target.AddHistory("user", "one")
+	target.AddHistory("assistant", "two")
+
+	duplicate := sm.NewSession("telegram:thread", "duplicate")
+	duplicate.SetAgentInfo("agent-shared", "codex", "duplicate")
+	foreign := sm.NewSession("telegram:other-thread:user-c", "foreign")
+	foreign.SetAgentInfo("agent-shared", "codex", "foreign")
+
+	got, err := sm.SwitchToInternalSession("telegram:thread", target.ID)
+	if err != nil {
+		t.Fatalf("SwitchToInternalSession: %v", err)
+	}
+	if got.ID != target.ID {
+		t.Fatalf("switched internal ID = %q, want %q", got.ID, target.ID)
+	}
+	if active := sm.ActiveSessionID("telegram:thread"); active != target.ID {
+		t.Fatalf("active internal ID = %q, want %q", active, target.ID)
+	}
+	if got.HistoryLen() != 2 {
+		t.Fatalf("target history length = %d, want 2", got.HistoryLen())
+	}
+
+	listed := sm.ListSessions("telegram:thread")
+	found := false
+	for _, s := range listed {
+		if s.ID == target.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("target %s was not attached to destination session key", target.ID)
+	}
+
+	internal := sm.FindByAgentSessionIDForKey("agent-shared", "telegram:thread")
+	if len(internal) != 2 {
+		t.Fatalf("same-chat internal sessions = %d, want 2", len(internal))
+	}
+	for _, s := range internal {
+		if s.ID == foreign.ID {
+			t.Fatalf("foreign session %s leaked into same-chat lookup", foreign.ID)
+		}
+	}
+	if _, err := sm.SwitchToInternalSession("telegram:thread", foreign.ID); err == nil {
+		t.Fatalf("switch to foreign session %s unexpectedly succeeded", foreign.ID)
+	}
+}
+
 func TestPastAgentSessionIDs_ClearPreservesHistory(t *testing.T) {
 	s := &Session{}
 	s.SetAgentSessionID("thread-1", "codex")
@@ -1117,4 +1169,3 @@ func TestKnownAgentSessionIDs_ResetAllSessionsBug(t *testing.T) {
 		t.Fatalf("filterOwnedSessions returned %d, want 3", len(filtered))
 	}
 }
-

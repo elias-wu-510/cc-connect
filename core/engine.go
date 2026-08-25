@@ -6949,6 +6949,7 @@ func (e *Engine) cmdList(p Platform, msg *Message, args []string) {
 		agentName := agent.Name()
 		activeSession := sessions.GetOrCreateActive(msg.SessionKey)
 		activeAgentID := activeSession.GetAgentSessionID()
+		activeInternalID := activeSession.ID
 
 		var sb strings.Builder
 		if totalPages > 1 {
@@ -6977,6 +6978,19 @@ func (e *Engine) cmdList(p Platform, msg *Message, args []string) {
 			}
 			sb.WriteString(fmt.Sprintf("%s **%d.** %s · **%d** msgs · %s\n",
 				marker, i+1, displayName, s.MessageCount, s.ModifiedAt.Format("01-02 15:04")))
+			for _, internal := range sessions.FindByAgentSessionIDForKey(s.ID, msg.SessionKey) {
+				internalMarker := "↳"
+				if internal.ID == activeInternalID {
+					internalMarker = "▶"
+				}
+				sb.WriteString(e.i18n.Tf(
+					MsgListInternalItem,
+					internalMarker,
+					internal.ID,
+					internal.HistoryLen(),
+					internal.GetUpdatedAt().Format("01-02 15:04"),
+				))
+			}
 		}
 		if totalPages > 1 {
 			sb.WriteString(fmt.Sprintf(e.i18n.T(MsgListPageHint), page, totalPages))
@@ -7019,6 +7033,44 @@ func (e *Engine) cmdSwitch(p Platform, msg *Message, args []string) {
 		return
 	}
 	agentSessions = e.applySessionFilter(agentSessions, sessions)
+	if internal := sessions.FindByIDForKey(query, msg.SessionKey); internal != nil {
+		agentSID := internal.GetAgentSessionID()
+		var matchedAgent *AgentSessionInfo
+		for i := range agentSessions {
+			if agentSessions[i].ID == agentSID {
+				matchedAgent = &agentSessions[i]
+				break
+			}
+		}
+		if matchedAgent != nil {
+			slog.Info("cmdSwitch: cleaning up old session", "session_key", msg.SessionKey)
+			e.cleanupInteractiveState(interactiveKey)
+			slog.Info("cmdSwitch: cleanup done", "session_key", msg.SessionKey)
+
+			if _, err := sessions.SwitchToInternalSession(msg.SessionKey, internal.ID); err != nil {
+				e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgError, err))
+				return
+			}
+
+			displayName := sessions.GetSessionName(agentSID)
+			if displayName == "" {
+				displayName = matchedAgent.Summary
+			}
+			shortID := agentSID
+			if len(shortID) > 12 {
+				shortID = shortID[:12]
+			}
+			e.reply(p, msg.ReplyCtx, e.i18n.Tf(
+				MsgSwitchInternalSuccess,
+				displayName,
+				internal.ID,
+				shortID,
+				internal.HistoryLen(),
+				matchedAgent.MessageCount,
+			))
+			return
+		}
+	}
 
 	matched := e.matchSession(agentSessions, sessions, query)
 	if matched == nil {
@@ -8498,7 +8550,7 @@ func (e *Engine) cmdCurrent(p Platform, msg *Message) {
 			agentID = e.i18n.T(MsgSessionNotStarted)
 		}
 		displayName := e.currentSessionDisplayName(agent, sessions, agentID)
-		e.reply(p, msg.ReplyCtx, fmt.Sprintf(e.i18n.T(MsgCurrentSession), displayName, agentID, len(s.History)))
+		e.reply(p, msg.ReplyCtx, fmt.Sprintf(e.i18n.T(MsgCurrentSession), displayName, s.ID, agentID, s.HistoryLen()))
 		return
 	}
 
@@ -13023,6 +13075,7 @@ func (e *Engine) renderListCard(sessionKey string, page int) (*Card, error) {
 	agentName := agent.Name()
 	activeSession := sessions.GetOrCreateActive(sessionKey)
 	activeAgentID := activeSession.GetAgentSessionID()
+	activeInternalID := activeSession.ID
 
 	var titleStr string
 	if totalPages > 1 {
@@ -13055,8 +13108,31 @@ func (e *Engine) renderListCard(sessionKey string, page int) (*Card, error) {
 		if s.ID == activeAgentID {
 			btnType = "primary"
 		}
+		var itemText strings.Builder
+		itemText.WriteString(e.i18n.Tf(
+			MsgListItem,
+			marker,
+			i+1,
+			displayName,
+			s.MessageCount,
+			s.ModifiedAt.Format("01-02 15:04"),
+		))
+		for _, internal := range sessions.FindByAgentSessionIDForKey(s.ID, sessionKey) {
+			internalMarker := "↳"
+			if internal.ID == activeInternalID {
+				internalMarker = "▶"
+			}
+			itemText.WriteString("\n")
+			itemText.WriteString(strings.TrimSpace(e.i18n.Tf(
+				MsgListInternalItem,
+				internalMarker,
+				internal.ID,
+				internal.HistoryLen(),
+				internal.GetUpdatedAt().Format("01-02 15:04"),
+			)))
+		}
 		cb.ListItemBtn(
-			e.i18n.Tf(MsgListItem, marker, i+1, displayName, s.MessageCount, s.ModifiedAt.Format("01-02 15:04")),
+			itemText.String(),
 			fmt.Sprintf("#%d", i+1),
 			btnType,
 			fmt.Sprintf("act:/switch %d", i+1),
@@ -13208,7 +13284,7 @@ func (e *Engine) renderCurrentCard(sessionKey string) *Card {
 		agentID = e.i18n.T(MsgSessionNotStarted)
 	}
 	displayName := e.currentSessionDisplayName(agent, sessions, agentID)
-	content := fmt.Sprintf(e.i18n.T(MsgCurrentSession), displayName, agentID, len(s.History))
+	content := fmt.Sprintf(e.i18n.T(MsgCurrentSession), displayName, s.ID, agentID, s.HistoryLen())
 	return NewCard().
 		Title(e.i18n.T(MsgCardTitleCurrentSession), "turquoise").
 		Markdown(content).

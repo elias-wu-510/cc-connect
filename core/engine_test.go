@@ -12532,6 +12532,59 @@ func TestCmdSwitch_ByIndex_SetsSession(t *testing.T) {
 	}
 }
 
+func TestCmdListAndSwitch_InternalIDDisambiguatesDuplicateAgentSession(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	agent := &switchableAgent{
+		sessions: []AgentSessionInfo{
+			{ID: "agent-shared", Summary: "Shared agent session", MessageCount: 8},
+		},
+	}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+
+	target := e.sessions.NewSession("test:channel:user-a", "target")
+	target.SetAgentInfo("agent-shared", agent.Name(), "target")
+	for i := 0; i < 21; i++ {
+		target.AddHistory("user", fmt.Sprintf("message-%d", i))
+	}
+
+	key := "test:channel"
+	duplicate := e.sessions.NewSession(key, "duplicate")
+	duplicate.SetAgentInfo("agent-shared", agent.Name(), "duplicate")
+	e.sessions.SetSessionName("agent-shared", "ffl-backup")
+
+	listMsg := &Message{SessionKey: key, Content: "/list", ReplyCtx: "ctx"}
+	e.handleCommand(p, listMsg, listMsg.Content)
+	listOutput := strings.Join(p.getSent(), "\n")
+	for _, want := range []string{target.ID, duplicate.ID, "**21** local msgs", "**0** local msgs"} {
+		if !strings.Contains(listOutput, want) {
+			t.Fatalf("/list output missing %q:\n%s", want, listOutput)
+		}
+	}
+
+	p.clearSent()
+	switchMsg := &Message{SessionKey: key, Content: "/switch " + target.ID, ReplyCtx: "ctx"}
+	e.handleCommand(p, switchMsg, switchMsg.Content)
+	if active := e.sessions.ActiveSessionID(key); active != target.ID {
+		t.Fatalf("active internal ID = %q, want %q", active, target.ID)
+	}
+	switchOutput := strings.Join(p.getSent(), "\n")
+	for _, want := range []string{"ffl-backup", target.ID, "21 local msgs", "8 agent msgs"} {
+		if !strings.Contains(switchOutput, want) {
+			t.Fatalf("/switch output missing %q:\n%s", want, switchOutput)
+		}
+	}
+
+	p.clearSent()
+	currentMsg := &Message{SessionKey: key, Content: "/current", ReplyCtx: "ctx"}
+	e.handleCommand(p, currentMsg, currentMsg.Content)
+	currentOutput := strings.Join(p.getSent(), "\n")
+	for _, want := range []string{"Internal ID: " + target.ID, "Local messages: 21"} {
+		if !strings.Contains(currentOutput, want) {
+			t.Fatalf("/current output missing %q:\n%s", want, currentOutput)
+		}
+	}
+}
+
 func TestCmdSwitch_ByIDPrefix(t *testing.T) {
 	p := &stubPlatformEngine{n: "test"}
 	agent := &switchableAgent{
@@ -15107,7 +15160,7 @@ func TestFilterExternalSessions_DynamicToggle(t *testing.T) {
 
 	p.sent = nil
 	e.cmdList(p, msg, nil)
-	count1 := strings.Count(p.sent[0], "msgs")
+	count1 := strings.Count(p.sent[0], ".** ")
 	if count1 != len(agentSessions) {
 		t.Fatalf("before toggle: expected %d sessions, got %d", len(agentSessions), count1)
 	}
@@ -15116,7 +15169,7 @@ func TestFilterExternalSessions_DynamicToggle(t *testing.T) {
 
 	p.sent = nil
 	e.cmdList(p, msg, nil)
-	count2 := strings.Count(p.sent[0], "msgs")
+	count2 := strings.Count(p.sent[0], ".** ")
 	if count2 != 2 {
 		t.Fatalf("after enabling filter: expected 2 sessions, got %d\nreply:\n%s", count2, p.sent[0])
 	}
@@ -15125,7 +15178,7 @@ func TestFilterExternalSessions_DynamicToggle(t *testing.T) {
 
 	p.sent = nil
 	e.cmdList(p, msg, nil)
-	count3 := strings.Count(p.sent[0], "msgs")
+	count3 := strings.Count(p.sent[0], ".** ")
 	if count3 != len(agentSessions) {
 		t.Fatalf("after disabling filter: expected %d sessions, got %d", len(agentSessions), count3)
 	}

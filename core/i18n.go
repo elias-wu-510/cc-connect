@@ -251,6 +251,7 @@ const (
 	MsgListMore                  MsgKey = "list_more"
 	MsgListPageHint              MsgKey = "list_page_hint"
 	MsgListSwitchHint            MsgKey = "list_switch_hint"
+	MsgListInternalItem          MsgKey = "list_internal_item"
 	MsgListError                 MsgKey = "list_error"
 	MsgHistoryEmpty              MsgKey = "history_empty"
 	MsgNameUsage                 MsgKey = "name_usage"
@@ -411,31 +412,31 @@ const (
 	MsgCronIDLabel               MsgKey = "cron_id_label"
 	MsgCronFailedSuffix          MsgKey = "cron_failed_suffix"
 
-	MsgTimerNotAvailable  MsgKey = "timer_not_available"
-	MsgTimerUsage         MsgKey = "timer_usage"
-	MsgTimerAddUsage      MsgKey = "timer_add_usage"
-	MsgTimerAdded         MsgKey = "timer_added"
-	MsgTimerAddedExec     MsgKey = "timer_added_exec"
-	MsgTimerAddExecUsage  MsgKey = "timer_addexec_usage"
-	MsgTimerEmpty         MsgKey = "timer_empty"
-	MsgTimerListTitle     MsgKey = "timer_list_title"
-	MsgTimerListFooter    MsgKey = "timer_list_footer"
-	MsgTimerDelUsage      MsgKey = "timer_del_usage"
-	MsgTimerMuteUsage     MsgKey = "timer_mute_usage"
-	MsgTimerDeleted       MsgKey = "timer_deleted"
-	MsgTimerNotFound      MsgKey = "timer_not_found"
-	MsgTimerMuted         MsgKey = "timer_muted"
-	MsgTimerUnmuted       MsgKey = "timer_unmuted"
-	MsgTimerCardHint      MsgKey = "timer_card_hint"
-	MsgTimerBtnMute       MsgKey = "timer_btn_mute"
-	MsgTimerBtnUnmute     MsgKey = "timer_btn_unmute"
-	MsgTimerBtnDelete     MsgKey = "timer_btn_delete"
-	MsgTimerIDLabel       MsgKey = "timer_id_label"
-	MsgTimerScheduledLabel MsgKey = "timer_scheduled_label"
-	MsgTimerFailedSuffix  MsgKey = "timer_failed_suffix"
-	MsgCommandsTagAgent          MsgKey = "commands_tag_agent"
-	MsgCommandsTagShell          MsgKey = "commands_tag_shell"
-	MsgUpgradeTimeoutSuffix      MsgKey = "upgrade_timeout_suffix"
+	MsgTimerNotAvailable    MsgKey = "timer_not_available"
+	MsgTimerUsage           MsgKey = "timer_usage"
+	MsgTimerAddUsage        MsgKey = "timer_add_usage"
+	MsgTimerAdded           MsgKey = "timer_added"
+	MsgTimerAddedExec       MsgKey = "timer_added_exec"
+	MsgTimerAddExecUsage    MsgKey = "timer_addexec_usage"
+	MsgTimerEmpty           MsgKey = "timer_empty"
+	MsgTimerListTitle       MsgKey = "timer_list_title"
+	MsgTimerListFooter      MsgKey = "timer_list_footer"
+	MsgTimerDelUsage        MsgKey = "timer_del_usage"
+	MsgTimerMuteUsage       MsgKey = "timer_mute_usage"
+	MsgTimerDeleted         MsgKey = "timer_deleted"
+	MsgTimerNotFound        MsgKey = "timer_not_found"
+	MsgTimerMuted           MsgKey = "timer_muted"
+	MsgTimerUnmuted         MsgKey = "timer_unmuted"
+	MsgTimerCardHint        MsgKey = "timer_card_hint"
+	MsgTimerBtnMute         MsgKey = "timer_btn_mute"
+	MsgTimerBtnUnmute       MsgKey = "timer_btn_unmute"
+	MsgTimerBtnDelete       MsgKey = "timer_btn_delete"
+	MsgTimerIDLabel         MsgKey = "timer_id_label"
+	MsgTimerScheduledLabel  MsgKey = "timer_scheduled_label"
+	MsgTimerFailedSuffix    MsgKey = "timer_failed_suffix"
+	MsgCommandsTagAgent     MsgKey = "commands_tag_agent"
+	MsgCommandsTagShell     MsgKey = "commands_tag_shell"
+	MsgUpgradeTimeoutSuffix MsgKey = "upgrade_timeout_suffix"
 
 	MsgCronScheduleLabel MsgKey = "cron_schedule_label"
 	MsgCronNextRunLabel  MsgKey = "cron_next_run_label"
@@ -536,9 +537,10 @@ const (
 	MsgDeleteModeDeletingBody   MsgKey = "delete_mode_deleting_body"
 	MsgDeleteModeMissingSession MsgKey = "delete_mode_missing_session"
 
-	MsgSwitchSuccess   MsgKey = "switch_success"
-	MsgSwitchNoMatch   MsgKey = "switch_no_match"
-	MsgSwitchNoSession MsgKey = "switch_no_session"
+	MsgSwitchSuccess         MsgKey = "switch_success"
+	MsgSwitchInternalSuccess MsgKey = "switch_internal_success"
+	MsgSwitchNoMatch         MsgKey = "switch_no_match"
+	MsgSwitchNoSession       MsgKey = "switch_no_session"
 
 	MsgCommandTimeout MsgKey = "command_timeout"
 
@@ -810,11 +812,11 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "Herramientas pre-autorizadas: %s",
 	},
 	MsgCurrentSession: {
-		LangEnglish:            "📌 Current session\nName: %s\nSession ID: %s\nLocal messages: %d",
-		LangChinese:            "📌 当前会话\n名称: %s\n会话 ID: %s\n本地消息数: %d",
-		LangTraditionalChinese: "📌 目前工作階段\n名稱: %s\n工作階段 ID: %s\n本機訊息數: %d",
-		LangJapanese:           "📌 現在のセッション\n名前: %s\nセッション ID: %s\nローカルメッセージ数: %d",
-		LangSpanish:            "📌 Sesión actual\nNombre: %s\nID de sesión: %s\nMensajes locales: %d",
+		LangEnglish:            "📌 Current session\nName: %s\nInternal ID: %s\nAgent session ID: %s\nLocal messages: %d",
+		LangChinese:            "📌 当前会话\n名称: %s\n内部索引: %s\nAgent 会话 ID: %s\n本地消息数: %d",
+		LangTraditionalChinese: "📌 目前工作階段\n名稱: %s\n內部索引: %s\nAgent 工作階段 ID: %s\n本機訊息數: %d",
+		LangJapanese:           "📌 現在のセッション\n名前: %s\n内部ID: %s\nAgent セッション ID: %s\nローカルメッセージ数: %d",
+		LangSpanish:            "📌 Sesión actual\nNombre: %s\nID interno: %s\nID de sesión del agente: %s\nMensajes locales: %d",
 	},
 	MsgToolAuthNotSupported: {
 		LangEnglish:            "This agent does not support tool authorization.",
@@ -1474,11 +1476,18 @@ var messages = map[MsgKey]map[Language]string{
 		LangSpanish:            "\n\nPágina %d/%d \n\n`/list <página>` para más\n",
 	},
 	MsgListSwitchHint: {
-		LangEnglish:            "\n`/switch <number>` to switch session",
-		LangChinese:            "\n`/switch <序号>` 切换会话",
-		LangTraditionalChinese: "\n`/switch <序號>` 切換會話",
-		LangJapanese:           "\n`/switch <番号>` でセッション切替",
-		LangSpanish:            "\n`/switch <número>` para cambiar sesión",
+		LangEnglish:            "\n`/switch <number | internal ID>` to switch session",
+		LangChinese:            "\n`/switch <序号 | 内部索引>` 切换会话",
+		LangTraditionalChinese: "\n`/switch <序號 | 內部索引>` 切換會話",
+		LangJapanese:           "\n`/switch <番号 | 内部ID>` でセッション切替",
+		LangSpanish:            "\n`/switch <número | ID interno>` para cambiar sesión",
+	},
+	MsgListInternalItem: {
+		LangEnglish:            "  %s `%s` · **%d** local msgs · %s\n",
+		LangChinese:            "  %s `%s` · **%d** 条本地消息 · %s\n",
+		LangTraditionalChinese: "  %s `%s` · **%d** 則本機訊息 · %s\n",
+		LangJapanese:           "  %s `%s` · ローカル **%d** 件 · %s\n",
+		LangSpanish:            "  %s `%s` · **%d** mensajes locales · %s\n",
 	},
 	MsgListError: {
 		LangEnglish:            "❌ Failed to list sessions: %v",
@@ -3227,6 +3236,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "✅ 已切換到：%s（%s，%d 則訊息）",
 		LangJapanese:           "✅ 切り替え：%s（%s、%d件）",
 		LangSpanish:            "✅ Cambiado a: %s (%s, %d mensajes)",
+	},
+	MsgSwitchInternalSuccess: {
+		LangEnglish:            "✅ Switched to: %s [%s] (%s, %d local msgs / %d agent msgs)",
+		LangChinese:            "✅ 已切换到：%s [%s]（%s，%d 条本地消息 / %d 条 Agent 消息）",
+		LangTraditionalChinese: "✅ 已切換到：%s [%s]（%s，%d 則本機訊息 / %d 則 Agent 訊息）",
+		LangJapanese:           "✅ 切り替え：%s [%s]（%s、ローカル %d 件 / Agent %d 件）",
+		LangSpanish:            "✅ Cambiado a: %s [%s] (%s, %d mensajes locales / %d del agente)",
 	},
 	MsgSwitchNoMatch: {
 		LangEnglish:            "❌ No session matching %q",
