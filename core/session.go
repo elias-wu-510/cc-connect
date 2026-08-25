@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,11 +19,11 @@ const ContinueSession = "__continue__"
 
 // Session tracks one conversation between a user and the agent.
 type Session struct {
-	ID                  string         `json:"id"`
-	Name                string         `json:"name"`
-	AgentSessionID      string         `json:"agent_session_id"`
-	AgentType           string         `json:"agent_type,omitempty"`
-	PastAgentSessionIDs []string       `json:"past_agent_session_ids,omitempty"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	AgentSessionID      string   `json:"agent_session_id"`
+	AgentType           string   `json:"agent_type,omitempty"`
+	PastAgentSessionIDs []string `json:"past_agent_session_ids,omitempty"`
 	// ActiveProvider is the agent provider name that was active when this
 	// session last took a turn. It is restored before --resume so that a
 	// cc-connect process restart does not silently drop a user's
@@ -393,6 +394,33 @@ func (sm *SessionManager) SwitchSession(userKey, target string) (*Session, error
 	return nil, fmt.Errorf("session %q not found", target)
 }
 
+// SwitchToInternalSession activates an exact cc-connect session ID (for
+// example, "s120") for userKey. Internal sessions may be referenced by more
+// than one platform session key when channel-level session sharing is enabled.
+func (sm *SessionManager) SwitchToInternalSession(userKey, target string) (*Session, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	s := sm.sessions[target]
+	if s == nil || !sm.internalSessionVisibleLocked(userKey, target) {
+		return nil, fmt.Errorf("session %q not found", target)
+	}
+
+	found := false
+	for _, sid := range sm.userSessions[userKey] {
+		if sid == target {
+			found = true
+			break
+		}
+	}
+	if !found {
+		sm.userSessions[userKey] = append(sm.userSessions[userKey], target)
+	}
+	sm.activeSession[userKey] = target
+	sm.saveLocked()
+	return s, nil
+}
+
 // SwitchToAgentSession finds or creates an internal session that maps to the
 // given agent session ID. If an existing session already references agentSID,
 // it becomes the active session. Otherwise a new session is created so the
@@ -559,6 +587,85 @@ func (sm *SessionManager) FindByID(id string) *Session {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.sessions[id]
+}
+
+// FindByIDForKey looks up an internal session only when it belongs to the same
+// base chat as userKey. This prevents /list and /switch from exposing another
+// channel's local history while still allowing shared and per-user keys from
+// the same channel to converge on the same internal session.
+func (sm *SessionManager) FindByIDForKey(id, userKey string) *Session {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	if !sm.internalSessionVisibleLocked(userKey, id) {
+		return nil
+	}
+	return sm.sessions[id]
+}
+
+// FindByAgentSessionIDForKey returns every internal cc-connect session in the
+// same base chat as userKey that points at the same agent-side session ID.
+// Multiple results are expected when shared and per-user platform keys resumed
+// the same agent session.
+func (sm *SessionManager) FindByAgentSessionIDForKey(agentSessionID, userKey string) []*Session {
+	if agentSessionID == "" {
+		return nil
+	}
+
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	out := make([]*Session, 0)
+	seen := make(map[string]struct{})
+	for key, ids := range sm.userSessions {
+		if !sessionKeysShareBaseChat(userKey, key) {
+			continue
+		}
+		for _, id := range ids {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			s := sm.sessions[id]
+			if s != nil && s.GetAgentSessionID() == agentSessionID {
+				seen[id] = struct{}{}
+				out = append(out, s)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return internalSessionSequence(out[i].ID) < internalSessionSequence(out[j].ID)
+	})
+	return out
+}
+
+func (sm *SessionManager) internalSessionVisibleLocked(userKey, target string) bool {
+	for key, ids := range sm.userSessions {
+		if !sessionKeysShareBaseChat(userKey, key) {
+			continue
+		}
+		for _, id := range ids {
+			if id == target {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sessionKeysShareBaseChat(a, b string) bool {
+	_, baseA, _ := ParseSessionKey(a)
+	_, baseB, _ := ParseSessionKey(b)
+	if baseA == "" || baseB == "" {
+		return a == b
+	}
+	return baseA == baseB
+}
+
+func internalSessionSequence(id string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(id, "s"))
+	if err != nil {
+		return int(^uint(0) >> 1)
+	}
+	return n
 }
 
 // DeleteByID removes a session by its internal ID from all tracking structures.
@@ -828,7 +935,7 @@ func (sm *SessionManager) PruneDuplicateSessions(mergeHistory bool) PruneResult 
 	defer sm.mu.Unlock()
 
 	// Group sessions by baseChat
-	chatSessions := make(map[string][]*Session) // baseChat -> sessions
+	chatSessions := make(map[string][]*Session)  // baseChat -> sessions
 	sessionToBaseChat := make(map[string]string) // session.ID -> baseChat
 
 	for userKey, sessionIDs := range sm.userSessions {

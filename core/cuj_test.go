@@ -64,8 +64,9 @@ type cujAgent struct {
 	// Used by tests that need to drive a multi-event turn (text chunks +
 	// permission request + result) from a single Send call. See
 	// setNextSessionEvents on cujAgent.
-	nextSessionEvents    []Event
-	nextSessionDelayMs   int
+	nextSessionEvents  []Event
+	nextSessionDelayMs int
+	listedSessions     []AgentSessionInfo
 }
 
 func (a *cujAgent) Name() string { return "cuj" }
@@ -92,7 +93,11 @@ func (a *cujAgent) StartSession(_ context.Context, _ string) (AgentSession, erro
 }
 
 func (a *cujAgent) ListSessions(_ context.Context) ([]AgentSessionInfo, error) {
-	return nil, nil
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]AgentSessionInfo, len(a.listedSessions))
+	copy(out, a.listedSessions)
+	return out, nil
 }
 func (a *cujAgent) Stop() error { return nil }
 
@@ -1130,8 +1135,8 @@ func TestCUJ_A3_ImageReachesAgent(t *testing.T) {
 	msg := &Message{
 		SessionKey: "test:img", Platform: "test", MessageID: "img1",
 		UserID: "img", UserName: "img",
-		Content: "what is in this image",
-		Images:  []ImageAttachment{{MimeType: "image/png", Data: []byte("\x89PNG fake"), FileName: "chart.png"}},
+		Content:  "what is in this image",
+		Images:   []ImageAttachment{{MimeType: "image/png", Data: []byte("\x89PNG fake"), FileName: "chart.png"}},
 		ReplyCtx: "ctx",
 	}
 	e.ReceiveMessage(plat, msg)
@@ -1194,8 +1199,8 @@ func TestCUJ_A5_FileReachesAgent(t *testing.T) {
 	msg := &Message{
 		SessionKey: "test:file", Platform: "test", MessageID: "f1",
 		UserID: "file", UserName: "file",
-		Content: "read this file",
-		Files:   []FileAttachment{{MimeType: "text/plain", Data: []byte("hello world"), FileName: "note.txt"}},
+		Content:  "read this file",
+		Files:    []FileAttachment{{MimeType: "text/plain", Data: []byte("hello world"), FileName: "note.txt"}},
 		ReplyCtx: "ctx",
 	}
 	e.ReceiveMessage(plat, msg)
@@ -1272,6 +1277,52 @@ func TestCUJ_B2_ListShowsAllSessions(t *testing.T) {
 	list := env.engine.sessions.ListSessions(key)
 	if len(list) < 3 {
 		t.Fatalf("SessionManager.ListSessions = %d, want ≥3", len(list))
+	}
+}
+
+// CUJ-B8 · Duplicate agent UUIDs remain distinguishable by cc-connect's
+// internal session IDs through /list, /switch, and /current.
+func TestCUJ_B8_InternalIndexDisambiguatesDuplicateAgentSession(t *testing.T) {
+	env := newCUJEnv(t)
+	env.agent.listedSessions = []AgentSessionInfo{
+		{ID: "agent-shared", Summary: "Shared agent session", MessageCount: 8},
+	}
+
+	target := env.engine.sessions.NewSession("test:b8:user-a", "target")
+	target.SetAgentInfo("agent-shared", env.agent.Name(), "target")
+	for i := 0; i < 21; i++ {
+		target.AddHistory("user", fmt.Sprintf("message-%d", i))
+	}
+
+	key := "test:b8"
+	duplicate := env.engine.sessions.NewSession(key, "duplicate")
+	duplicate.SetAgentInfo("agent-shared", env.agent.Name(), "duplicate")
+	env.engine.sessions.SetSessionName("agent-shared", "ffl-backup")
+
+	env.userSends("b8", "/list")
+	env.waitFor("list reply", 2*time.Second, func() bool { return len(env.plat.getSent()) >= 1 })
+	listOutput := env.lastSent()
+	for _, want := range []string{target.ID, duplicate.ID, "**21** local msgs", "**0** local msgs"} {
+		if !strings.Contains(listOutput, want) {
+			t.Fatalf("/list output missing %q:\n%s", want, listOutput)
+		}
+	}
+
+	env.plat.clearSent()
+	env.userSends("b8", "/switch "+target.ID)
+	env.waitFor("switch reply", 2*time.Second, func() bool { return len(env.plat.getSent()) >= 1 })
+	if output := env.lastSent(); !strings.Contains(output, target.ID) || !strings.Contains(output, "21 local msgs") {
+		t.Fatalf("/switch did not confirm exact internal session:\n%s", output)
+	}
+
+	env.plat.clearSent()
+	env.userSends("b8", "/current")
+	env.waitFor("current reply", 2*time.Second, func() bool { return len(env.plat.getSent()) >= 1 })
+	currentOutput := env.lastSent()
+	for _, want := range []string{"Internal ID: " + target.ID, "Local messages: 21"} {
+		if !strings.Contains(currentOutput, want) {
+			t.Fatalf("/current output missing %q:\n%s", want, currentOutput)
+		}
 	}
 }
 
@@ -2325,4 +2376,3 @@ func TestCUJ_STREAM1_StreamingResumesAfterPermissionPrompt(t *testing.T) {
 		}
 	}
 }
-

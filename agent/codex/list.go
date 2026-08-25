@@ -114,7 +114,9 @@ func parseCodexSessionFile(path, filterCwd string) *core.AgentSessionInfo {
 				ID  string `json:"id"`
 				Cwd string `json:"cwd"`
 			}
-			if json.Unmarshal(entry.Payload, &meta) == nil {
+			// Forked rollouts retain their parent's session_meta later in the
+			// transcript. The first metadata record belongs to this rollout.
+			if sessionID == "" && json.Unmarshal(entry.Payload, &meta) == nil {
 				sessionID = meta.ID
 				sessionCwd = meta.Cwd
 			}

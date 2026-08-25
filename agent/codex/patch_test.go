@@ -73,3 +73,27 @@ func TestPatchSessionSource_Idempotent(t *testing.T) {
 		t.Errorf("file was modified when it shouldn't have been")
 	}
 }
+
+func TestParseCodexSessionFile_UsesForkSessionMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	childID := "child-session"
+	parentID := "parent-session"
+	path := filepath.Join(tmpDir, "rollout-"+childID+".jsonl")
+	content := strings.Join([]string{
+		`{"type":"session_meta","payload":{"id":"` + childID + `","cwd":"/tmp/project"}}`,
+		`{"type":"session_meta","payload":{"id":"` + parentID + `","cwd":"/tmp/project"}}`,
+		`{"type":"response_item","payload":{"role":"user","content":[{"type":"input_text","text":"hello"}]}}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	info := parseCodexSessionFile(path, "/tmp/project")
+	if info == nil {
+		t.Fatal("expected forked rollout to be listed")
+	}
+	if info.ID != childID {
+		t.Fatalf("session ID = %q, want fork session %q", info.ID, childID)
+	}
+}
