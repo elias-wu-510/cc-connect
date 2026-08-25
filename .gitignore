@@ -81,6 +81,8 @@ temp/
 *~
 *.pid
 *.log
+# Empty workspace-session state files leaked by core tests.
+core/test_ws_*.json
 
 # ============================================================================
 # IDE & Editor
